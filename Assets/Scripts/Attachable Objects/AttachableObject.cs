@@ -10,6 +10,7 @@ public class AttachableObject : CenterOfMass
         rigidbodyHandler.useGravity = false;
         rigidbodyHandler.constraints = RigidbodyConstraints.FreezeAll;
         if (antiSelfIntersectionBox) ex.ChangeAntiIntersectionBox(antiSelfIntersectionBox);
+        ex.generalCenterOfMass.list.Add(this);
     }
 
     public void ReturnToHandler(Example ex)
@@ -20,5 +21,11 @@ public class AttachableObject : CenterOfMass
         rigidbodyHandler.useGravity = true;
         rigidbodyHandler.constraints = RigidbodyConstraints.None;
         if (antiSelfIntersectionBox) ex.SetDefaultAntiIntersectionBox();
+        ex.generalCenterOfMass.list.Remove(this);
+    }
+
+    private void OnDestroy()
+    {
+        if (rigidbodyHandler) Destroy(rigidbodyHandler.gameObject);
     }
 }

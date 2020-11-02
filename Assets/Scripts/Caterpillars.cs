@@ -14,7 +14,7 @@ public class Caterpillars : MonoBehaviour
     {
         if (other.gameObject.CompareTag("Player") || other.gameObject.CompareTag("Caterpillar")) return;
         collisionCount++;
-        example.touchSurface = true;
+        example.SetTouchSurface(true);
     }
 
     private void OnTriggerExit(Collider other)
@@ -22,6 +22,6 @@ public class Caterpillars : MonoBehaviour
         if (other.gameObject.CompareTag("Player") || other.gameObject.CompareTag("Caterpillar")) return;
         collisionCount--;
         if (collisionCount == 0)
-            example.touchSurface = false;
+            example.SetTouchSurface(false);
     }
 }

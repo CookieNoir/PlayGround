@@ -32,8 +32,6 @@ public class BoxMainObject : MonoBehaviour
     public GameObject[] robot = new GameObject[15];
     //комментариями помечена диагональ, что бы удобней читалось
 
-
-
     private static byte[,] matrixCross = new byte[15, 15];
     //                     0   1  2  3  4  5  6  7  8  9 
     //{   /*0 корпус*/       {0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1}, 
@@ -117,19 +115,21 @@ public class BoxMainObject : MonoBehaviour
         robot[robot.Length - 1] = box;
     }
 
+    public void SetMatrixType(Accessory accessory)
+    {
+        if (accessory)
+        {
+            System.Type type = accessory.GetType();
+            if (type == typeof(Grab))
+                matrixCross = matrixCrossGrab;
+            else if (type == typeof(HydraulicHammer))
+                matrixCross = matrixCrossHydro;
+        }
+        else matrixCross = matrixCrossEmpty;
+    }
+
     public bool DetectAllCollission()
     {
-        if (Example.IsEquip == Example.EnumAccessory.grab)
-            matrixCross = matrixCrossGrab;
-        else
-        {
-            if (Example.IsEquip == Example.EnumAccessory.hydrohammer)
-                matrixCross = matrixCrossHydro;
-            else
-            {
-                matrixCross = matrixCrossEmpty;
-            }
-        }
         for (int i = 0; i < robot.Length; i++)
         {
             for (int j = 0; j < robot.Length; j++)

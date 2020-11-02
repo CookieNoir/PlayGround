@@ -11,12 +11,17 @@ public class Grab : Accessory
     public List<AttachableObject> Left;
     public List<AttachableObject> Right;
 
-    private bool attached;
+    private bool attachedAttachableObject;
     private AttachableObject attachedObject;
-    private float rot; // by Y axis
-    private float attachedRot;
+    private float rot; // Угол вращения относительно оси Y
+    private float attachedRot; // Угол, при котором произошел захват
 
-    protected override void Start()
+    public AttachableObject GetAttachedObject()
+    {
+        return attachedObject;
+    }
+
+    protected override void Awake()
     {
         rigidbodyHandler.centerOfMass = centerOfMass;
         rigidbodyHandler.mass = mass;
@@ -28,12 +33,12 @@ public class Grab : Accessory
         fixedRotation = Quaternion.Euler(0, -90, 0);
         setFixedDistance = SetFixedDistance();
 
-        attached = false;
+        attachedAttachableObject = false;
     }
 
     protected override void Update()
     {
-        if (equipped&&!attached)
+        if (equipped&&!attachedAttachableObject)
         {
             foreach (AttachableObject rb_left in Left)
             {
@@ -48,14 +53,19 @@ public class Grab : Accessory
                         break;
                     }
                 }
-                if (attached) break;
+                if (attachedAttachableObject) break;
             }
         }
     }
 
+    public float GetClawsRotation()
+    {
+        return rot;
+    }
+
     public override void FirstAction()
     {
-        if (!attached)
+        if (!attachedAttachableObject)
         {
             rot += Time.deltaTime * speed;
             RotateClaws();
@@ -66,7 +76,7 @@ public class Grab : Accessory
     {
         rot -= Time.deltaTime * speed;
         RotateClaws();
-        if (attached)
+        if (attachedAttachableObject)
         {
             if (rot + 0.5f < attachedRot || rot == lowRotationBorderDegrees)
                 SetFree();
@@ -81,34 +91,26 @@ public class Grab : Accessory
         rightClaw.transform.localRotation = Quaternion.Euler(0, -rot, 0);
     }
 
-
     public void SetAttached(AttachableObject ao)
     {
         ao.transform.parent = transform;
         ao.LeaveHandler(example);
         attachedObject = ao;
-        if (equipped) example.generalCenterOfMass.list.Add(ao);
-        attached = true;
+        attachedAttachableObject = true;
         attachedRot = rot;
     }
 
     public void SetFree()
     {
         attachedObject.ReturnToHandler(example);
-        if (equipped) example.generalCenterOfMass.list.Remove(attachedObject);
         attachedObject = null;
-        attached = false;
+        attachedAttachableObject = false;
     }
 
     public override void Equip(Transform parent, Example ex)
     {
         transform.parent = parent;
         example = ex;
-        example.generalCenterOfMass.list.Add(this);
-        if (attached)
-        {
-            example.generalCenterOfMass.list.Add(attachedObject);
-        }
         LeaveHandler(example);
 
         StopCoroutine(setFixedDistance);
@@ -118,12 +120,7 @@ public class Grab : Accessory
 
     public override void Unequip()
     {
-        example.generalCenterOfMass.list.Remove(this);
-        if (attached)
-        {
-            example.generalCenterOfMass.list.Remove(attachedObject);
-            SetFree();
-        }
+        if (attachedAttachableObject) SetFree();
         ReturnToHandler(example);
 
         example = null;

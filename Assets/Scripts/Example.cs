@@ -1,115 +1,15 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 [RequireComponent(typeof(Rigidbody))]
-public class Example : MonoBehaviour
+public class Example : RoinPartsAndStates
 {
-    public GameObject player;//сама платформа
+    private bool touchSurface;
 
-    protected GameObject body,
-                        cameras,
-                        arm0,
-                        arm1,
-                        arm2,
-                        arm3,
-                        arm4,
-                        arm5,
-                        arm6,
-                        link1,
-                        link2,
-                        link3,
-                        link4,
-                        link5,
-                        link6,
-                        link7,
-                        cylinder1,
-                        cylinder2,
-                        cylinder3,
-                        cylinder5,
-                        cylinder7,
-                        piston1,
-                        piston2,
-                        piston3,
-                        piston5,
-                        piston7,
-                        fixed3,
-                        fixed5,
-                        fixed7,
-                        clutch5,
-                        clutch7,
-                        tong,
-
-                        footFR,
-                        cylinderFR,
-                        pistonFR,
-                        footFL,
-                        cylinderFL,
-                        pistonFL,
-                        footBR,
-                        cylinderBR,
-                        pistonBR,
-                        footBL,
-                        cylinderBL,
-                        pistonBL,
-
-                        pitcher,
-                        cylinderRoller,
-                        roller,
-                        yawer,
-                        grip,
-                        pistonRoller;
-
-    public float speed,
-                 speedRotation,
-                 speedElongation;
-    private float startSpeed,
-                  startSpeedRotation,
-                  startSpeedElongation;
-
-    public float PI = Mathf.PI;
-
-    [HideInInspector] public bool touchSurface;
-    public bool allowRotation;
-    public bool allowMove;
-
-    public float hitFootMin, //для лап
-                 hitFootMax,
-                 hit1Min,
-                 hit1Max,
-                 hit2Min,
-                 hit2Max,
-                 hitFractureMin,
-                 hitFractureMax,
-                 hit5Min,
-                 hit5Max,
-                 hit6Min,
-                 hit6Max,
-                 hitPitchMin,
-                 hitPitchMax,
-                 hitRollMin,
-                 hitRollMax;
-
-    // Длины сторон и углы для вычисления треугольников
-    public float alpha0,
-                    alpha1, beta1, gamma1, d1, l1,
-                    alpha2, beta2, gamma2, d2, l2,
-                    alpha3, beta3, gamma3, d3, l3,
-                    alpha5, beta5, gamma5, phi5, psi51, psi52, theta5,
-                    OA5, OB5, CD5, BD5, OC5, //Размеры, которые остаются постоянными
-                    l6,
-                    alphaPitch, beta7, gamma7, phi7, psi71, psi72, theta7,
-                    OA7, OB7, CD7, BD7, OC7, //Размеры, которые остаются постоянными
-                    alphaFR, betaFR, gammaFR, dFR, lFR,
-                    alphaFL, betaFL, gammaFL, dFL, lFL,
-                    alphaBR, betaBR, gammaBR, dBR, lBR,
-                    alphaBL, betaBL, gammaBL, dBL, lBL,
-                    alphaRoll, betaRoll, gammaRoll, lRoll, dRoll,
-                    alphaYaw;
-
-
+    [Header("Камера")]
+    public CameraController cameraController;
     [Header("Самопересечения")]
-    public BoxMainObject test;
+    public BoxMainObject boxIntersection;
     public GameObject defaultBox;
 
     [HideInInspector] public Rigidbody rb;
@@ -141,46 +41,44 @@ public class Example : MonoBehaviour
     [Header("Система уведомлений")]
     public NotificationSystem notificationSystem;
 
-    public enum EnumAccessory { empty, hydrohammer, grab };
-    public static EnumAccessory IsEquip = EnumAccessory.empty;
+    public void SetTouchSurface(bool value)
+    {
+        touchSurface = value;
+    }
+
+    public bool GetSelected()
+    {
+        return selected;
+    }
+
+    public bool GetEquipped()
+    {
+        return equipped;
+    }
 
     public void ChangeAntiIntersectionBox(GameObject box)
     {
-        test.SetLast(box);
+        boxIntersection.SetLast(box);
     }
 
     public void SetDefaultAntiIntersectionBox()
     {
-        test.SetLast(defaultBox);
+        boxIntersection.SetLast(defaultBox);
     }
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
-
-        TieObjiects();
+        WriteDefaultState();
 
         generalCenterOfMass = GetComponent<GeneralCenterOfMass>();
-
-        speedRotation = 0.5f * Time.deltaTime;
-        speed = 2.5f * Time.deltaTime;
-        speedElongation = 0.5f * Time.deltaTime;
-
-        // расчет сторон и углов треугольников
-        SetSize();
-        SetHits();
-
-        startSpeed = speed;
-        startSpeedRotation = speedRotation;
-        startSpeedElongation = speedElongation;
         maxOverloadInverse = 1f / maxOverload;
-
-        //touchSurface = true;
-        allowRotation = false;
-        allowMove = true;
 
         accessory = null;
         accessories = new List<Accessory>();
+        boxIntersection.SetMatrixType(accessory);
+
+        notificationSystem.ChangeScale(joinCamera.isActiveAndEnabled);
     }
 
     private void OnCollisionEnter(Collision collision)
@@ -191,10 +89,40 @@ public class Example : MonoBehaviour
                 !contact.thisCollider.CompareTag("Leg") &&
                 !contact.thisCollider.CompareTag("Accessory"))
             {
-                notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                 break;
             }
-        }   
+        }
+    }
+
+    public bool IsAccessoryAvailableToJoin()
+    {
+        return joinCameraUI.color == colorConnect;
+    }
+
+    public void UnequipAccessory()
+    {
+        if (equipped)
+        {
+            accessory.Unequip();
+            boxIntersection.SetMatrixType(accessory);
+            equipped = false;
+        }
+    }
+
+    public void EquipAccessoryWithForce(in Accessory accessory)
+    {
+        this.accessory = accessory;
+        EquipAccessory();
+        this.accessory.SetFixedDistanceAndRotation();
+    }
+
+    private void EquipAccessory()
+    {
+        accessory.Equip(join, this);
+        boxIntersection.SetMatrixType(accessory);
+        equipped = true;
+        notificationSystem.Notify(NotificationSystem.NotificationTypes.message, "Оборудование сменено на " + accessory.name);
     }
 
     // Для событий, не связанных с физикой напрямую
@@ -213,8 +141,9 @@ public class Example : MonoBehaviour
                         {
                             accessory = ac;
                             joinCamera.enabled = true;
+                            notificationSystem.ChangeScale(true);
                             joinCameraUI.gameObject.SetActive(true);
-                            joinCameraText.text = dist.ToString("F8");
+                            joinCameraText.text = dist.ToString("F8") + " m";
                             selected = true;
                             break;
                         }
@@ -239,7 +168,7 @@ public class Example : MonoBehaviour
                 }
                 else
                 {
-                    joinCameraText.text = distance.ToString("F8");
+                    joinCameraText.text = distance.ToString("F8") + " m";
                     if (distance < distanceToConnect)
                     {
                         joinCameraUI.color = colorConnect;
@@ -267,28 +196,18 @@ public class Example : MonoBehaviour
                 {
                     if (distance < distanceToConnect)
                     {
-                        accessory.Equip(join, this);
-
-                        if (accessory.gameObject.name == "Гидромолот")
-                            IsEquip = EnumAccessory.hydrohammer;
-                        else
-                            IsEquip = EnumAccessory.grab;
-
-                        equipped = true;
-                        notificationSystem.Notify(NotificationSystem.notifyTypes.message, "Оборудование сменено на " + accessory.name);
+                        EquipAccessory();
                     }
                     else
                     {
-                        notificationSystem.Notify(NotificationSystem.notifyTypes.warning, "Для присоединения сократите дистанцию");
+                        notificationSystem.Notify(NotificationSystem.NotificationTypes.warning, "Для присоединения сократите дистанцию");
                     }
                 }
             }
             else
             {
-                accessory.Unequip();
-                IsEquip = EnumAccessory.empty;
-                equipped = false;
-                notificationSystem.Notify(NotificationSystem.notifyTypes.message, "Оборудование снято");
+                UnequipAccessory();
+                notificationSystem.Notify(NotificationSystem.NotificationTypes.message, "Оборудование снято");
             }
         }
 
@@ -309,6 +228,7 @@ public class Example : MonoBehaviour
     private void TurnOffJoinCameraAndUI()
     {
         joinCamera.enabled = false;
+        notificationSystem.ChangeScale(false);
         joinCameraUI.gameObject.SetActive(false);
     }
 
@@ -320,7 +240,7 @@ public class Example : MonoBehaviour
             f = 0;
             if (overloadTimer <= 0)
             {
-                notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Перегруз");
+                notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Перегруз");
                 overloadTimer = 5f;
             }
             else
@@ -330,8 +250,8 @@ public class Example : MonoBehaviour
         }
         else if (f > 1) f = 1;
         f = f * f * (3 - 2 * f);
-        speed = startSpeed * f;
-        speedRotation = startSpeedRotation * f;
+        currentSpeed = defaultSpeed * f;
+        currentSpeedRotation = defaultSpeedRotation * f;
     }
 
     // Обработка нажатия клавиш
@@ -341,14 +261,14 @@ public class Example : MonoBehaviour
         if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow))
         {
             if (allowMove && touchSurface)
-                player.transform.position += body.transform.forward * speed;
+                transform.position += body.transform.forward * currentSpeed;
         }
 
         //Движение
         if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow))
         {
             if (allowMove && touchSurface)
-                player.transform.position -= body.transform.forward * speed;
+                transform.position -= body.transform.forward * currentSpeed;
         }
 
         //Поворот
@@ -356,7 +276,7 @@ public class Example : MonoBehaviour
         {
             if (allowMove && touchSurface)
             {
-                player.transform.RotateAround(body.transform.position, body.transform.up, -speedRotation * Mathf.Rad2Deg);
+                transform.RotateAround(body.transform.position, body.transform.up, -currentSpeedRotation * Mathf.Rad2Deg);
             }
         }
 
@@ -365,7 +285,7 @@ public class Example : MonoBehaviour
         {
             if (allowMove && touchSurface)
             {
-                player.transform.RotateAround(body.transform.position, body.transform.up, speedRotation * Mathf.Rad2Deg);
+                transform.RotateAround(body.transform.position, body.transform.up, currentSpeedRotation * Mathf.Rad2Deg);
             }
         }
 
@@ -381,12 +301,12 @@ public class Example : MonoBehaviour
                 float tmpf_1 = alpha0;
 
                 //вращаем
-                RAM.RotateBase_Yaw(1, ref arm0, ref alpha0, speedRotation);
+                RAM.RotateBase_Yaw(1, ref arm0, ref alpha0, currentSpeedRotation);
 
                 //если после вращения произошло самопересечение, то вовращаем все назад
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     arm0.transform.position = tmpv_1;
                     arm0.transform.rotation = tmpq_1;
                     alpha0 = tmpf_1;
@@ -404,10 +324,10 @@ public class Example : MonoBehaviour
                 Quaternion tmpq_1 = arm0.transform.rotation;
                 float tmpf_1 = alpha0;
 
-                RAM.RotateBase_Yaw(-1, ref arm0, ref alpha0, speedRotation);
-                if (test.DetectAllCollission())
+                RAM.RotateBase_Yaw(-1, ref arm0, ref alpha0, currentSpeedRotation);
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     arm0.transform.position = tmpv_1;
                     arm0.transform.rotation = tmpq_1;
                     alpha0 = tmpf_1;
@@ -432,18 +352,18 @@ public class Example : MonoBehaviour
                 float tmp_b = beta1;
                 float tmp_g = gamma1;
 
-                if (alpha1 <= hit1Max - speedRotation)
+                if (alpha1 <= hit1Max - currentSpeedRotation)
                     RAM.RotateArmEasy(1, ref arm1, ref cylinder1, ref piston1,
                         ref alpha1, ref beta1, ref gamma1,
-                        l1, d1, speedRotation);
+                        l1, d1, currentSpeedRotation);
                 else if (alpha1 < hit1Max)
-                    RAM.RotateArmEasy((hit1Max - alpha1) / speedRotation, ref arm1, ref cylinder1, ref piston1,
+                    RAM.RotateArmEasy((hit1Max - alpha1) / currentSpeedRotation, ref arm1, ref cylinder1, ref piston1,
                         ref alpha1, ref beta1, ref gamma1,
-                        l1, d1, speedRotation);
+                        l1, d1, currentSpeedRotation);
 
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     arm1.transform.position = tmpV_arm1;
                     arm1.transform.rotation = tmpQ_arm1;
                     cylinder1.transform.position = tmpV_cylinder1;
@@ -473,18 +393,18 @@ public class Example : MonoBehaviour
                 float tmp_b = beta1;
                 float tmp_g = gamma1;
 
-                if (alpha1 >= hit1Min + speedRotation)
+                if (alpha1 >= hit1Min + currentSpeedRotation)
                     RAM.RotateArmEasy(-1, ref arm1, ref cylinder1, ref piston1,
                         ref alpha1, ref beta1, ref gamma1,
-                        l1, d1, speedRotation);
+                        l1, d1, currentSpeedRotation);
                 else if (alpha1 > hit1Min)
-                    RAM.RotateArmEasy((hit1Min - alpha1) / speedRotation, ref arm1, ref cylinder1, ref piston1,
+                    RAM.RotateArmEasy((hit1Min - alpha1) / currentSpeedRotation, ref arm1, ref cylinder1, ref piston1,
                         ref alpha1, ref beta1, ref gamma1,
-                        l1, d1, speedRotation);
+                        l1, d1, currentSpeedRotation);
 
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     arm1.transform.position = tmpV_arm1;
                     arm1.transform.rotation = tmpQ_arm1;
                     cylinder1.transform.position = tmpV_cylinder1;
@@ -514,18 +434,18 @@ public class Example : MonoBehaviour
                 float tmp_b = beta2;
                 float tmp_g = gamma2;
 
-                if (alpha2 <= hit2Max - speedRotation)
+                if (alpha2 <= hit2Max - currentSpeedRotation)
                     RAM.RotateArmEasy(1, ref arm2, ref cylinder2, ref piston2,
                         ref alpha2, ref beta2, ref gamma2,
-                        l2, d2, speedRotation);
+                        l2, d2, currentSpeedRotation);
                 else if (alpha2 < hit2Max)
-                    RAM.RotateArmEasy((hit2Max - alpha2) / speedRotation, ref arm2, ref cylinder2, ref piston2,
+                    RAM.RotateArmEasy((hit2Max - alpha2) / currentSpeedRotation, ref arm2, ref cylinder2, ref piston2,
                         ref alpha2, ref beta2, ref gamma2,
-                        l2, d2, speedRotation);
+                        l2, d2, currentSpeedRotation);
 
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     arm2.transform.position = tmpV_arm;
                     arm2.transform.rotation = tmpQ_arm;
                     cylinder2.transform.position = tmpV_cylinder;
@@ -555,18 +475,18 @@ public class Example : MonoBehaviour
                 float tmp_b = beta2;
                 float tmp_g = gamma2;
 
-                if (alpha2 >= hit2Min + speedRotation)
+                if (alpha2 >= hit2Min + currentSpeedRotation)
                     RAM.RotateArmEasy(-1, ref arm2, ref cylinder2, ref piston2,
                        ref alpha2, ref beta2, ref gamma2,
-                       l2, d2, speedRotation);
+                       l2, d2, currentSpeedRotation);
                 else if (alpha2 > hit2Min)
-                    RAM.RotateArmEasy((hit2Min - alpha2) / speedRotation, ref arm2, ref cylinder2, ref piston2,
+                    RAM.RotateArmEasy((hit2Min - alpha2) / currentSpeedRotation, ref arm2, ref cylinder2, ref piston2,
                        ref alpha2, ref beta2, ref gamma2,
-                       l2, d2, speedRotation);
+                       l2, d2, currentSpeedRotation);
 
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     arm2.transform.position = tmpV_arm;
                     arm2.transform.rotation = tmpQ_arm;
                     cylinder2.transform.position = tmpV_cylinder;
@@ -598,18 +518,18 @@ public class Example : MonoBehaviour
                 float tmp_b = beta3;
                 float tmp_g = gamma3;
 
-                if (alpha3 >= hitFractureMin + speedRotation)
+                if (alpha3 >= hitFractureMin + currentSpeedRotation)
                     RAM.Fracture(1, ref arm3, ref arm4, ref cylinder3, ref piston3, ref fixed3,
                         ref alpha3, ref beta3, ref gamma3,
-                        l3, d3, speedRotation);
+                        l3, d3, currentSpeedRotation);
                 else if (alpha3 > hitFractureMin)
-                    RAM.Fracture((alpha3 - hitFractureMin) / speedRotation, ref arm3, ref arm4, ref cylinder3, ref piston3, ref fixed3,
+                    RAM.Fracture((alpha3 - hitFractureMin) / currentSpeedRotation, ref arm3, ref arm4, ref cylinder3, ref piston3, ref fixed3,
                        ref alpha3, ref beta3, ref gamma3,
-                       l3, d3, speedRotation);
+                       l3, d3, currentSpeedRotation);
 
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     arm3.transform.position = tmpV_arm;
                     arm3.transform.rotation = tmpQ_arm;
                     cylinder3.transform.position = tmpV_cylinder;
@@ -643,18 +563,18 @@ public class Example : MonoBehaviour
                 float tmp_b = beta3;
                 float tmp_g = gamma3;
 
-                if (alpha3 <= hitFractureMax - speedRotation)
+                if (alpha3 <= hitFractureMax - currentSpeedRotation)
                     RAM.Fracture(-1, ref arm3, ref arm4, ref cylinder3, ref piston3, ref fixed3,
                        ref alpha3, ref beta3, ref gamma3,
-                       l3, d3, speedRotation);
+                       l3, d3, currentSpeedRotation);
                 else if (alpha3 < hitFractureMax)
-                    RAM.Fracture((alpha3 - hitFractureMax) / speedRotation, ref arm3, ref arm4, ref cylinder3, ref piston3, ref fixed3,
+                    RAM.Fracture((alpha3 - hitFractureMax) / currentSpeedRotation, ref arm3, ref arm4, ref cylinder3, ref piston3, ref fixed3,
                        ref alpha3, ref beta3, ref gamma3,
-                       l3, d3, speedRotation);
+                       l3, d3, currentSpeedRotation);
 
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     arm3.transform.position = tmpV_arm;
                     arm3.transform.rotation = tmpQ_arm;
                     cylinder3.transform.position = tmpV_cylinder;
@@ -691,18 +611,18 @@ public class Example : MonoBehaviour
                 float tmp_psi51 = psi51;
                 float tmp_psi52 = psi52;
 
-                if (alpha5 >= hit5Min + speedRotation)
+                if (alpha5 >= hit5Min + currentSpeedRotation)
                     RAM.RotateArmHard_Pitch(1, ref arm5, ref cylinder5, ref piston5, ref clutch5, ref fixed5,
                         ref alpha5, ref beta5, ref gamma5, ref theta5, ref phi5, ref psi51, ref psi52,
-                        OA5, OB5, OC5, BD5, CD5, speedRotation);
+                        OA5, OB5, OC5, BD5, CD5, currentSpeedRotation);
                 else if (alpha5 > hit5Min)
-                    RAM.RotateArmHard_Pitch((alpha5 - hit5Min) / speedRotation, ref arm5, ref cylinder5, ref piston5, ref clutch5, ref fixed5,
+                    RAM.RotateArmHard_Pitch((alpha5 - hit5Min) / currentSpeedRotation, ref arm5, ref cylinder5, ref piston5, ref clutch5, ref fixed5,
                         ref alpha5, ref beta5, ref gamma5, ref theta5, ref phi5, ref psi51, ref psi52,
-                        OA5, OB5, OC5, BD5, CD5, speedRotation);
+                        OA5, OB5, OC5, BD5, CD5, currentSpeedRotation);
 
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     arm5.transform.position = tmpV_arm;
                     arm5.transform.rotation = tmpQ_arm;
                     cylinder5.transform.position = tmpV_cylinder;
@@ -742,18 +662,18 @@ public class Example : MonoBehaviour
                 float tmp_psi51 = psi51;
                 float tmp_psi52 = psi52;
 
-                if (alpha5 <= hit5Max - speedRotation)
+                if (alpha5 <= hit5Max - currentSpeedRotation)
                     RAM.RotateArmHard_Pitch(-1, ref arm5, ref cylinder5, ref piston5, ref clutch5, ref fixed5,
                        ref alpha5, ref beta5, ref gamma5, ref theta5, ref phi5, ref psi51, ref psi52,
-                       OA5, OB5, OC5, BD5, CD5, speedRotation);
+                       OA5, OB5, OC5, BD5, CD5, currentSpeedRotation);
                 else if (alpha5 < hit5Max)
-                    RAM.RotateArmHard_Pitch((alpha5 - hit5Max) / speedRotation, ref arm5, ref cylinder5, ref piston5, ref clutch5, ref fixed5,
+                    RAM.RotateArmHard_Pitch((alpha5 - hit5Max) / currentSpeedRotation, ref arm5, ref cylinder5, ref piston5, ref clutch5, ref fixed5,
                        ref alpha5, ref beta5, ref gamma5, ref theta5, ref phi5, ref psi51, ref psi52,
-                       OA5, OB5, OC5, BD5, CD5, speedRotation);
+                       OA5, OB5, OC5, BD5, CD5, currentSpeedRotation);
 
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     arm5.transform.position = tmpV_arm;
                     arm5.transform.rotation = tmpQ_arm;
                     cylinder5.transform.position = tmpV_cylinder;
@@ -783,14 +703,14 @@ public class Example : MonoBehaviour
                 Quaternion tmpQ_arm = arm6.transform.rotation;
                 float tmp_l = l6;
 
-                if (l6 <= hit6Max - speedElongation)
-                    RAM.Elongation(1, ref arm6, ref l6, speedElongation);
+                if (l6 <= hit6Max - currentSpeedElongation)
+                    RAM.Elongation(1, ref arm6, ref l6, currentSpeedElongation);
                 else if (l6 < hit6Max)
-                    RAM.Elongation((hit6Max - l6) / speedElongation, ref arm6, ref l6, speedElongation);
+                    RAM.Elongation((hit6Max - l6) / currentSpeedElongation, ref arm6, ref l6, currentSpeedElongation);
 
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     arm6.transform.position = tmpV_arm;
                     arm6.transform.rotation = tmpQ_arm;
                     l6 = tmp_l;
@@ -807,14 +727,14 @@ public class Example : MonoBehaviour
                 Quaternion tmpQ_arm = arm6.transform.rotation;
                 float tmp_l = l6;
 
-                if (l6 >= hit6Min + speedElongation)
-                    RAM.Elongation(-1, ref arm6, ref l6, speedElongation);
+                if (l6 >= hit6Min + currentSpeedElongation)
+                    RAM.Elongation(-1, ref arm6, ref l6, currentSpeedElongation);
                 else if (l6 > hit6Min)
-                    RAM.Elongation((hit6Min - l6) / speedElongation, ref arm6, ref l6, speedElongation);
+                    RAM.Elongation((hit6Min - l6) / currentSpeedElongation, ref arm6, ref l6, currentSpeedElongation);
 
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     arm6.transform.position = tmpV_arm;
                     arm6.transform.rotation = tmpQ_arm;
                     l6 = tmp_l;
@@ -845,18 +765,18 @@ public class Example : MonoBehaviour
                 float tmp_psi52 = psi72;
                 float tmp_p = alphaPitch;
 
-                if (alphaPitch >= hitPitchMin + speedRotation)
+                if (alphaPitch >= hitPitchMin + currentSpeedRotation)
                     RAM.RotateArmHard_Pitch(1, ref pitcher, ref cylinder7, ref piston7, ref clutch7, ref fixed7,
                         ref alphaPitch, ref beta7, ref gamma7, ref theta7, ref phi7, ref psi71, ref psi72,
-                        OA7, OB7, OC7, BD7, CD7, speedRotation);
+                        OA7, OB7, OC7, BD7, CD7, currentSpeedRotation);
                 else if (alphaPitch > hitPitchMin)
-                    RAM.RotateArmHard_Pitch((alphaPitch - hitPitchMin) / speedRotation, ref pitcher, ref cylinder7, ref piston7, ref clutch7, ref fixed7,
+                    RAM.RotateArmHard_Pitch((alphaPitch - hitPitchMin) / currentSpeedRotation, ref pitcher, ref cylinder7, ref piston7, ref clutch7, ref fixed7,
                         ref alphaPitch, ref beta7, ref gamma7, ref theta7, ref phi7, ref psi71, ref psi72,
-                        OA7, OB7, OC7, BD7, CD7, speedRotation);
+                        OA7, OB7, OC7, BD7, CD7, currentSpeedRotation);
 
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     cylinder7.transform.position = tmpV_cylinder;
                     cylinder7.transform.rotation = tmpQ_cylinder;
                     piston7.transform.position = tmpV_piston;
@@ -902,18 +822,18 @@ public class Example : MonoBehaviour
                 float tmp_psi52 = psi72;
                 float tmp_p = alphaPitch;
 
-                if (alphaPitch <= hitPitchMax - speedRotation)
+                if (alphaPitch <= hitPitchMax - currentSpeedRotation)
                     RAM.RotateArmHard_Pitch(-1, ref pitcher, ref cylinder7, ref piston7, ref clutch7, ref fixed7,
                         ref alphaPitch, ref beta7, ref gamma7, ref theta7, ref phi7, ref psi71, ref psi72,
-                        OA7, OB7, OC7, BD7, CD7, speedRotation);
+                        OA7, OB7, OC7, BD7, CD7, currentSpeedRotation);
                 else if (alphaPitch < hitPitchMax)
-                    RAM.RotateArmHard_Pitch((alphaPitch - hitPitchMax) / speedRotation, ref pitcher, ref cylinder7, ref piston7, ref clutch7, ref fixed7,
+                    RAM.RotateArmHard_Pitch((alphaPitch - hitPitchMax) / currentSpeedRotation, ref pitcher, ref cylinder7, ref piston7, ref clutch7, ref fixed7,
                         ref alphaPitch, ref beta7, ref gamma7, ref theta7, ref phi7, ref psi71, ref psi72,
-                        OA7, OB7, OC7, BD7, CD7, speedRotation);
+                        OA7, OB7, OC7, BD7, CD7, currentSpeedRotation);
 
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     cylinder7.transform.position = tmpV_cylinder;
                     cylinder7.transform.rotation = tmpQ_cylinder;
                     piston7.transform.position = tmpV_piston;
@@ -951,18 +871,18 @@ public class Example : MonoBehaviour
                 float tmp_betaRoll = betaRoll;
                 float tmp_gammaRoll = gammaRoll;
 
-                if (alphaRoll >= hitRollMin + speedRotation)
+                if (alphaRoll >= hitRollMin + currentSpeedRotation)
                     RAM.RotateRoll(1, ref roller, ref cylinderRoller, ref pistonRoller,
                        ref alphaRoll, ref betaRoll, ref gammaRoll,
-                       lRoll, dRoll, speedRotation);
+                       lRoll, dRoll, currentSpeedRotation);
                 else if (alphaRoll > hitRollMin)
-                    RAM.RotateRoll((alphaRoll - hitRollMin) / speedRotation, ref roller, ref cylinderRoller, ref pistonRoller,
+                    RAM.RotateRoll((alphaRoll - hitRollMin) / currentSpeedRotation, ref roller, ref cylinderRoller, ref pistonRoller,
                        ref alphaRoll, ref betaRoll, ref gammaRoll,
-                       lRoll, dRoll, speedRotation);
+                       lRoll, dRoll, currentSpeedRotation);
 
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     pitcher.transform.position = tmpV_roller;
                     pitcher.transform.rotation = tmpQ_roller;
                     cylinderRoller.transform.position = tmpV_cylinderRoller;
@@ -992,18 +912,18 @@ public class Example : MonoBehaviour
                 float tmp_betaRoll = betaRoll;
                 float tmp_gammaRoll = gammaRoll;
 
-                if (alphaRoll <= hitRollMax - speedRotation)
+                if (alphaRoll <= hitRollMax - currentSpeedRotation)
                     RAM.RotateRoll(-1, ref roller, ref cylinderRoller, ref pistonRoller,
                       ref alphaRoll, ref betaRoll, ref gammaRoll,
-                      lRoll, dRoll, speedRotation);
+                      lRoll, dRoll, currentSpeedRotation);
                 else if (alphaRoll < hitRollMax)
-                    RAM.RotateRoll((alphaRoll - hitRollMax) / speedRotation, ref roller, ref cylinderRoller, ref pistonRoller,
+                    RAM.RotateRoll((alphaRoll - hitRollMax) / currentSpeedRotation, ref roller, ref cylinderRoller, ref pistonRoller,
                       ref alphaRoll, ref betaRoll, ref gammaRoll,
-                      lRoll, dRoll, speedRotation);
+                      lRoll, dRoll, currentSpeedRotation);
 
-                if (test.DetectAllCollission())
+                if (boxIntersection.DetectAllCollission())
                 {
-                    notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                    notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                     pitcher.transform.position = tmpV_roller;
                     pitcher.transform.rotation = tmpQ_roller;
                     cylinderRoller.transform.position = tmpV_cylinderRoller;
@@ -1027,10 +947,10 @@ public class Example : MonoBehaviour
 
             if (allowRotation)
                 //RAM.RotateYaw(1, ref yawer, ref alphaYaw, speedRotation);
-                RAM.RotateBase_Yaw(1, ref yawer, ref alphaYaw, speedRotation);
-            if (test.DetectAllCollission())
+                RAM.RotateBase_Yaw(1, ref yawer, ref alphaYaw, currentSpeedRotation);
+            if (boxIntersection.DetectAllCollission())
             {
-                notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                 yawer.transform.position = tmpV_yawer;
                 yawer.transform.rotation = tmpQ_yawer;
 
@@ -1046,10 +966,10 @@ public class Example : MonoBehaviour
             float tmp_alphaYaw = alphaYaw;
             if (allowRotation)
                 // RAM.RotateYaw(-1, ref yawer, ref alphaYaw, speedRotation);
-                RAM.RotateBase_Yaw(-1, ref yawer, ref alphaYaw, speedRotation);
-            if (test.DetectAllCollission())
+                RAM.RotateBase_Yaw(-1, ref yawer, ref alphaYaw, currentSpeedRotation);
+            if (boxIntersection.DetectAllCollission())
             {
-                notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                 yawer.transform.position = tmpV_yawer;
                 yawer.transform.rotation = tmpQ_yawer;
 
@@ -1101,32 +1021,32 @@ public class Example : MonoBehaviour
             float tmp_gammaBL = gammaBL;
 
 
-            if (Mathf.Abs(alphaFR) >= hitFootMin + speedRotation)
+            if (Mathf.Abs(alphaFR) >= hitFootMin + currentSpeedRotation)
             {
 
                 RAM.RaiseFoot(1, ref footFR, ref cylinderFR, ref pistonFR,
-                    ref alphaFR, ref betaFR, ref gammaFR, lFR, dFR, speedRotation);
+                    ref alphaFR, ref betaFR, ref gammaFR, lFR, dFR, currentSpeedRotation);
                 RAM.RaiseFoot(1, ref footFL, ref cylinderFL, ref pistonFL,
-                    ref alphaFL, ref betaFL, ref gammaFL, lFL, dFL, speedRotation);
+                    ref alphaFL, ref betaFL, ref gammaFL, lFL, dFL, currentSpeedRotation);
                 RAM.RaiseFoot(1, ref footBR, ref cylinderBR, ref pistonBR,
-                    ref alphaBR, ref betaBR, ref gammaBR, lBR, dBR, speedRotation);
+                    ref alphaBR, ref betaBR, ref gammaBR, lBR, dBR, currentSpeedRotation);
                 RAM.RaiseFoot(1, ref footBL, ref cylinderBL, ref pistonBL,
-                    ref alphaBL, ref betaBL, ref gammaBL, lBL, dBL, speedRotation);
+                    ref alphaBL, ref betaBL, ref gammaBL, lBL, dBL, currentSpeedRotation);
             }
             else if (Mathf.Abs(alphaFR) > hitFootMin)
             {
-                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMin) / speedRotation, ref footFR, ref cylinderFR, ref pistonFR,
-                   ref alphaFR, ref betaFR, ref gammaFR, lFR, dFR, speedRotation);
-                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMin) / speedRotation, ref footFL, ref cylinderFL, ref pistonFL,
-                    ref alphaFL, ref betaFL, ref gammaFL, lFL, dFL, speedRotation);
-                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMin) / speedRotation, ref footBR, ref cylinderBR, ref pistonBR,
-                    ref alphaBR, ref betaBR, ref gammaBR, lBR, dBR, speedRotation);
-                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMin) / speedRotation, ref footBL, ref cylinderBL, ref pistonBL,
-                    ref alphaBL, ref betaBL, ref gammaBL, lBL, dBL, speedRotation);
+                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMin) / currentSpeedRotation, ref footFR, ref cylinderFR, ref pistonFR,
+                   ref alphaFR, ref betaFR, ref gammaFR, lFR, dFR, currentSpeedRotation);
+                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMin) / currentSpeedRotation, ref footFL, ref cylinderFL, ref pistonFL,
+                    ref alphaFL, ref betaFL, ref gammaFL, lFL, dFL, currentSpeedRotation);
+                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMin) / currentSpeedRotation, ref footBR, ref cylinderBR, ref pistonBR,
+                    ref alphaBR, ref betaBR, ref gammaBR, lBR, dBR, currentSpeedRotation);
+                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMin) / currentSpeedRotation, ref footBL, ref cylinderBL, ref pistonBL,
+                    ref alphaBL, ref betaBL, ref gammaBL, lBL, dBL, currentSpeedRotation);
             }
-            if (test.DetectAllCollission())
+            if (boxIntersection.DetectAllCollission())
             {
-                notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                 footFR.transform.position = tmpV_footFR;
                 footFR.transform.rotation = tmpQ_footFR;
                 cylinderFR.transform.position = tmpV_cylinderFR;
@@ -1217,31 +1137,31 @@ public class Example : MonoBehaviour
             float tmp_gammaBL = gammaBL;
 
 
-            if (Mathf.Abs(alphaFR) <= hitFootMax - speedRotation)
+            if (Mathf.Abs(alphaFR) <= hitFootMax - currentSpeedRotation)
             {
                 RAM.RaiseFoot(-1, ref footFR, ref cylinderFR, ref pistonFR,
-                     ref alphaFR, ref betaFR, ref gammaFR, lFR, dFR, speedRotation);
+                     ref alphaFR, ref betaFR, ref gammaFR, lFR, dFR, currentSpeedRotation);
                 RAM.RaiseFoot(-1, ref footFL, ref cylinderFL, ref pistonFL,
-                    ref alphaFL, ref betaFL, ref gammaFL, lFL, dFL, speedRotation);
+                    ref alphaFL, ref betaFL, ref gammaFL, lFL, dFL, currentSpeedRotation);
                 RAM.RaiseFoot(-1, ref footBR, ref cylinderBR, ref pistonBR,
-                    ref alphaBR, ref betaBR, ref gammaBR, lBR, dBR, speedRotation);
+                    ref alphaBR, ref betaBR, ref gammaBR, lBR, dBR, currentSpeedRotation);
                 RAM.RaiseFoot(-1, ref footBL, ref cylinderBL, ref pistonBL,
-                    ref alphaBL, ref betaBL, ref gammaBL, lBL, dBL, speedRotation);
+                    ref alphaBL, ref betaBL, ref gammaBL, lBL, dBL, currentSpeedRotation);
             }
             else if (Mathf.Abs(alphaFR) < hitFootMax)
             {
-                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMax) / speedRotation, ref footFR, ref cylinderFR, ref pistonFR,
-                   ref alphaFR, ref betaFR, ref gammaFR, lFR, dFR, speedRotation);
-                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMax) / speedRotation, ref footFL, ref cylinderFL, ref pistonFL,
-                    ref alphaFL, ref betaFL, ref gammaFL, lFL, dFL, speedRotation);
-                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMax) / speedRotation, ref footBR, ref cylinderBR, ref pistonBR,
-                    ref alphaBR, ref betaBR, ref gammaBR, lBR, dBR, speedRotation);
-                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMax) / speedRotation, ref footBL, ref cylinderBL, ref pistonBL,
-                    ref alphaBL, ref betaBL, ref gammaBL, lBL, dBL, speedRotation);
+                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMax) / currentSpeedRotation, ref footFR, ref cylinderFR, ref pistonFR,
+                   ref alphaFR, ref betaFR, ref gammaFR, lFR, dFR, currentSpeedRotation);
+                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMax) / currentSpeedRotation, ref footFL, ref cylinderFL, ref pistonFL,
+                    ref alphaFL, ref betaFL, ref gammaFL, lFL, dFL, currentSpeedRotation);
+                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMax) / currentSpeedRotation, ref footBR, ref cylinderBR, ref pistonBR,
+                    ref alphaBR, ref betaBR, ref gammaBR, lBR, dBR, currentSpeedRotation);
+                RAM.RaiseFoot((Mathf.Abs(alphaFR) - hitFootMax) / currentSpeedRotation, ref footBL, ref cylinderBL, ref pistonBL,
+                    ref alphaBL, ref betaBL, ref gammaBL, lBL, dBL, currentSpeedRotation);
             }
-            if (test.DetectAllCollission())
+            if (boxIntersection.DetectAllCollission())
             {
-                notificationSystem.Notify(NotificationSystem.notifyTypes.alert, "Удар");
+                notificationSystem.Notify(NotificationSystem.NotificationTypes.alert, "Удар");
                 footFR.transform.position = tmpV_footFR;
                 footFR.transform.rotation = tmpQ_footFR;
                 cylinderFR.transform.position = tmpV_cylinderFR;
@@ -1284,7 +1204,7 @@ public class Example : MonoBehaviour
 
 
             }
-            if (Mathf.Abs(alphaFR) < hitFootMax && Mathf.Abs(alphaFR) > hitFootMax - startSpeedRotation)
+            if (Mathf.Abs(alphaFR) < hitFootMax && Mathf.Abs(alphaFR) > hitFootMax - defaultSpeedRotation)
             {
                 allowRotation = true;
                 allowMove = false;
@@ -1306,237 +1226,6 @@ public class Example : MonoBehaviour
         {
             if (accessories.Contains(other.GetComponent<Accessory>())) accessories.Remove(other.GetComponent<Accessory>());
         }
-    }
-
-
-
-    // Привязка деталей
-    void TieObjiects()
-    {
-        player = GameObject.Find("MainGameObject");
-        body = GameObject.Find("body");
-        cameras = GameObject.Find("cameras");
-
-        // Связывание стрел
-        {
-            arm0 = GameObject.Find("arm0");
-            arm1 = GameObject.Find("arm1");
-            arm2 = GameObject.Find("arm2");
-            arm3 = GameObject.Find("arm3");
-            arm4 = GameObject.Find("arm4");
-            arm5 = GameObject.Find("arm5");
-            arm6 = GameObject.Find("arm6");
-
-            link1 = GameObject.Find("link1");
-            link2 = GameObject.Find("link2");
-            link3 = GameObject.Find("link3");
-            link4 = GameObject.Find("link4");
-            link5 = GameObject.Find("link5");
-            link6 = GameObject.Find("link6");
-
-            cylinder1 = GameObject.Find("cylinder1");
-            cylinder2 = GameObject.Find("cylinder2");
-            cylinder3 = GameObject.Find("cylinder3");
-            cylinder5 = GameObject.Find("cylinder5");
-            cylinder7 = GameObject.Find("cylinder7");
-
-            piston1 = GameObject.Find("piston1");
-            piston2 = GameObject.Find("piston2");
-            piston3 = GameObject.Find("piston3");
-            piston5 = GameObject.Find("piston5");
-            piston7 = GameObject.Find("piston7");
-
-
-            fixed3 = GameObject.Find("fixed3");
-            fixed5 = GameObject.Find("fixed5");
-            fixed7 = GameObject.Find("fixed7");
-            clutch5 = GameObject.Find("clutch5");
-            clutch7 = GameObject.Find("clutch7");
-            tong = GameObject.Find("tong");
-        }
-
-        //Связывание лап
-        {
-            footFR = GameObject.Find("footFR");
-            cylinderFR = GameObject.Find("cylinderFR");
-            pistonFR = GameObject.Find("pistonFR");
-
-            footBL = GameObject.Find("footBL");
-            cylinderBL = GameObject.Find("cylinderBL");
-            pistonBL = GameObject.Find("pistonBL");
-
-            footBR = GameObject.Find("footBR");
-            cylinderBR = GameObject.Find("cylinderBR");
-            pistonBR = GameObject.Find("pistonBR");
-
-            footFL = GameObject.Find("footFL");
-            cylinderFL = GameObject.Find("cylinderFL");
-            pistonFL = GameObject.Find("pistonFL");
-        }
-
-        //Связывание НПУ
-        {
-            pitcher = GameObject.Find("pitcher");
-            cylinderRoller = GameObject.Find("cylinderRoller");
-            roller = GameObject.Find("roller");
-            yawer = GameObject.Find("yawer");
-            grip = GameObject.Find("grip");
-            pistonRoller = GameObject.Find("pistonRoller");
-        }
-    }
-
-    //Задание размеров
-    void SetSize()
-    {
-        float h; //Переменная для вычисления изменяющихся сторон треугольников
-
-        //Угол поворота базы
-        {
-            alpha0 = 0;
-        }
-
-        //Размеры для первой стрелы
-        {
-            h = OtherMath.DistanceYZ(cylinder1, piston1);
-            l1 = OtherMath.DistanceYZ(cylinder1, link1);
-            d1 = OtherMath.DistanceYZ(piston1, link1);
-            alpha1 = Mathf.Acos((l1 * l1 + d1 * d1 - h * h) / (2 * l1 * d1));
-            beta1 = OtherMath.CalcBeta(l1, d1, h, alpha1);
-            gamma1 = PI - alpha1 - beta1;
-        }
-
-        //Размеры для второй стрелы
-        {
-            h = OtherMath.DistanceYZ(cylinder2, piston2);
-            l2 = OtherMath.DistanceYZ(cylinder2, link2);
-            d2 = OtherMath.DistanceYZ(piston2, link2);
-            alpha2 = Mathf.Acos((l2 * l2 + d2 * d2 - h * h) / (2 * l2 * d2));
-            beta2 = OtherMath.CalcBeta(l2, d2, h, alpha2);
-            gamma2 = PI - alpha2 - beta2;
-        }
-
-        //Размеры для излома
-        {
-            cylinder3.transform.SetParent(arm3.transform);
-            GameObject emptyArm = new GameObject();
-            emptyArm.transform.localPosition = new Vector3(0, 0, 0);
-            h = OtherMath.DistanceLocalYZ(cylinder3, piston3);
-            l3 = OtherMath.DistanceLocalYZ(cylinder3, emptyArm);
-            d3 = OtherMath.DistanceLocalYZ(piston3, emptyArm);
-            alpha3 = Mathf.Acos((l3 * l3 + d3 * d3 - h * h) / (2 * l3 * d3));
-            beta3 = OtherMath.CalcBeta(l3, d3, h, alpha3);
-            gamma3 = PI - alpha3 - beta3;
-            cylinder3.transform.SetParent(arm2.transform);
-            Destroy(emptyArm);
-        }
-
-        //Размеры для четвертой стрелы
-        {
-            OA5 = OtherMath.DistanceYZ(fixed5, cylinder5);
-            OB5 = OtherMath.DistanceYZ(fixed5, piston5);
-            h = OtherMath.DistanceYZ(piston5, cylinder5);
-            alpha5 = Mathf.Acos((OA5 * OA5 + OB5 * OB5 - h * h) / (2 * OB5 * OA5));
-            beta5 = OtherMath.CalcBeta(OA5, OB5, h, alpha5);
-            gamma5 = PI - alpha5 - beta5;
-            OC5 = OtherMath.DistanceYZ(fixed5, link5);
-            BD5 = OtherMath.DistanceYZ(piston5, clutch5);
-            CD5 = OtherMath.DistanceYZ(link5, clutch5);
-            h = OtherMath.DistanceYZ(piston5, link5);
-            theta5 = Mathf.Acos((BD5 * BD5 + CD5 * CD5 - h * h) / (2 * BD5 * CD5));
-            psi51 = Mathf.Acos((OC5 * OC5 + h * h - OB5 * OB5) / (2 * OC5 * h));
-            psi52 = OtherMath.CalcBeta(CD5, BD5, h, theta5);
-            phi5 = OtherMath.CalcBeta(OC5, h, OB5, psi51);
-        }
-
-        //Величина удлинения шестой стрелы
-        {
-            l6 = OtherMath.DistanceYZ(link5, link6);
-        }
-
-        //Размеры вычисления тангажа НПУ
-        {
-            OA7 = OtherMath.DistanceYZ(fixed7, cylinder7);
-            OB7 = OtherMath.DistanceYZ(fixed7, piston7);
-            h = OtherMath.DistanceYZ(piston7, cylinder7);
-            alphaPitch = Mathf.Acos((OA7 * OA7 + OB7 * OB7 - h * h) / (2 * OB7 * OA7));
-            beta7 = OtherMath.CalcBeta(OA7, OB7, h, alphaPitch);
-            gamma7 = PI - alphaPitch - beta7;
-            OC7 = OtherMath.DistanceYZ(fixed7, tong);
-            BD7 = OtherMath.DistanceYZ(piston7, clutch7);
-            CD7 = OtherMath.DistanceYZ(tong, clutch7);
-            h = OtherMath.DistanceYZ(piston7, tong);
-            theta7 = Mathf.Acos((BD7 * BD7 + CD7 * CD7 - h * h) / (2 * BD7 * CD7));
-            psi71 = Mathf.Acos((OC7 * OC7 + h * h - OB7 * OB7) / (2 * OC7 * h));
-            psi72 = OtherMath.CalcBeta(CD7, BD7, h, theta7);
-            phi7 = OtherMath.CalcBeta(OC7, h, OB7, psi71);
-        }
-
-        //Размеры лап
-        {
-            h = OtherMath.DistanceXYZ(cylinderFR, pistonFR);
-            lFR = OtherMath.DistanceXYZ(cylinderFR, footFR);
-            dFR = OtherMath.DistanceXYZ(pistonFR, footFR);
-            alphaFR = Mathf.Acos((lFR * lFR + dFR * dFR - h * h) / (2 * lFR * dFR));
-            betaFR = OtherMath.CalcBeta(lFR, dFR, h, alphaFR);
-            gammaFR = PI - alphaFR - betaFR;
-
-            h = OtherMath.DistanceXYZ(cylinderFL, pistonFL);
-            lFL = OtherMath.DistanceXYZ(cylinderFL, footFL);
-            dFL = OtherMath.DistanceXYZ(pistonFL, footFL);
-            alphaFL = Mathf.Acos((lFL * lFL + dFL * dFL - h * h) / (2 * lFL * dFL));
-            betaFL = OtherMath.CalcBeta(lFL, dFL, h, alphaFL);
-            gammaFL = PI - alphaFL - betaFL;
-
-            h = OtherMath.DistanceXYZ(cylinderBR, pistonBR);
-            lBR = OtherMath.DistanceXYZ(cylinderBR, footBR);
-            dBR = OtherMath.DistanceXYZ(pistonBR, footBR);
-            alphaBR = Mathf.Acos((lBR * lBR + dBR * dBR - h * h) / (2 * lBR * dBR));
-            betaBR = OtherMath.CalcBeta(lBR, dBR, h, alphaBR);
-            gammaBR = PI - alphaBR - betaBR;
-
-            h = OtherMath.DistanceXYZ(cylinderBL, pistonBL);
-            lBL = OtherMath.DistanceXYZ(cylinderBL, footBL);
-            dBL = OtherMath.DistanceXYZ(pistonBL, footBL);
-            alphaBL = Mathf.Acos((lBL * lBL + dBL * dBL - h * h) / (2 * lBL * dBL));
-            betaBL = OtherMath.CalcBeta(lBL, dBL, h, alphaBL);
-            gammaBL = PI - alphaBL - betaBL;
-        }
-
-        //Размеры для вычисления крена НПУ
-        {
-            h = OtherMath.DistanceXY(cylinderRoller, pistonRoller);
-            lRoll = OtherMath.DistanceXY(roller, cylinderRoller);
-            dRoll = OtherMath.DistanceXY(pistonRoller, roller);
-            alphaRoll = Mathf.Acos((lRoll * lRoll + dRoll * dRoll - h * h) / (2 * lRoll * dRoll));
-            betaRoll = OtherMath.CalcBeta(lRoll, dRoll, h, alphaRoll);
-            gammaRoll = PI - alphaRoll - betaRoll;
-        }
-
-        //Угол рыскания НПУ
-        {
-            alphaYaw = 0;
-        }
-    }
-
-    //Задание ограничений на повороты и перемещения
-    void SetHits()
-    {
-        hitFootMin = (alphaBL + alphaBR + alphaFR + alphaFL) / 4;
-        hitFootMax = 93 * Mathf.Deg2Rad;
-        hit1Max = 135 * Mathf.Deg2Rad;
-        hit1Min = 31 * Mathf.Deg2Rad;
-        hit2Max = 121 * Mathf.Deg2Rad;
-        hit2Min = 41 * Mathf.Deg2Rad;
-        hitFractureMin = 29 * Mathf.Deg2Rad;
-        hitFractureMax = 130 * Mathf.Deg2Rad;
-        hit5Max = 118 * Mathf.Deg2Rad;
-        hit5Min = 19 * Mathf.Deg2Rad;
-        hit6Min = l6;
-        hit6Max = 1.88f;
-        hitPitchMin = 26 * Mathf.Deg2Rad;
-        hitPitchMax = 153 * Mathf.Deg2Rad;
-        hitRollMin = 25 * Mathf.Deg2Rad;
-        hitRollMax = 118 * Mathf.Deg2Rad;
     }
 
     private void OnDrawGizmos()

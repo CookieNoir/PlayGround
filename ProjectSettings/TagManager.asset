@@ -9,6 +9,10 @@ TagManager:
   - Accessory
   - Caterpillar
   - Leg
+  - Box
+  - Table
+  - Pipe
+  - Spawned Prop
   layers:
   - Default
   - TransparentFX
@@ -18,8 +22,8 @@ TagManager:
   - UI
   - 
   - 
-  - 
-  - 
+  - Static Objects
+  - Post-Processing
   - 
   - 
   - 
